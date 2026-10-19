@@ -10,15 +10,15 @@ input{width:100%;box-sizing:border-box;padding:12px;border-radius:8px;border:1px
 small,.muted{color:#bac8df}.plane{padding:12px 0;border-bottom:1px solid #41516c}.plane:last-child{border:0}
 strong{font-size:18px}.warn{color:#ffd49c}details{margin-top:12px}code{overflow-wrap:anywhere}
 </style></head><body><main>
-<h1>🌙 PlaneMoon Planner</h1><p>Testovacia Android verzia 1.5 – ADS-B diagnostika</p>
+<h1>🌙 PlaneMoon Planner</h1><p>Testovacia Android verzia 1.6 – poloha lietadiel na oblohe</p>
 <section class="panel"><h2>Stanovište</h2>
 <label>Zemepisná šírka<input id="lat" type="text" inputmode="decimal" value="48,8087"></label>
 <label>Zemepisná dĺžka<input id="lon" type="text" inputmode="decimal" value="19,3164"></label>
-<button onclick="load()">Načítať živé ADS-B lietadlá</button>
+<label>Nadmorská výška stanovišťa (m)<input id="elev" type="text" inputmode="decimal" value="525"></label><button onclick="load()">Načítať živé ADS-B lietadlá</button>
 <p id="status">Pripravené na test pripojenia.</p><small>Údaje sú približné, nie sú určené na riadenie letovej prevádzky.</small></section>
 <section class="panel"><h2>Výsledok ADS-B</h2><div id="out">Zatiaľ bez údajov.</div>
 <details><summary>Diagnostika odpovede servera</summary><p id="diag" class="muted">Bez údajov</p></details></section>
-<section class="panel"><h2>Plánovanie preletov</h2><p>Predpoveď preletu pred Mesiacom zatiaľ nie je zapnutá. Najprv overujeme polohy lietadiel, ich smer a výšku.</p></section>
+<section class="panel"><h2>Plánovanie preletov</h2><p>Novinka: pri lietadlách počítame azimut a výšku nad obzorom z tvojho stanovišťa. Porovnanie s polohou Mesiaca a predpoveď času tranzitu doplníme v ďalšej fáze.</p></section>
 </main><script>
 const el=id=>document.getElementById(id);
 function coord(id){return Number(el(id).value.trim().replace(',','.'))}
@@ -33,6 +33,17 @@ function distanceKm(lat1,lon1,lat2,lon2){
  const rad=Math.PI/180,dlat=(lat2-lat1)*rad,dlon=(lon2-lon1)*rad;
  const a=Math.sin(dlat/2)**2+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dlon/2)**2;
  return Math.round(6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)))
+}
+function skyPosition(lat0,lon0,h0,lat1,lon1,h1){
+ const r=Math.PI/180,a=6378137,e2=0.00669437999014;
+ function xyz(lat,lon,h){const phi=lat*r,lam=lon*r,N=a/Math.sqrt(1-e2*Math.sin(phi)**2);return [(N+h)*Math.cos(phi)*Math.cos(lam),(N+h)*Math.cos(phi)*Math.sin(lam),(N*(1-e2)+h)*Math.sin(phi)]}
+ const o=xyz(lat0,lon0,h0),p=xyz(lat1,lon1,h1),dx=p[0]-o[0],dy=p[1]-o[1],dz=p[2]-o[2],phi=lat0*r,lam=lon0*r;
+ const east=-Math.sin(lam)*dx+Math.cos(lam)*dy;
+ const north=-Math.sin(phi)*Math.cos(lam)*dx-Math.sin(phi)*Math.sin(lam)*dy+Math.cos(phi)*dz;
+ const up=Math.cos(phi)*Math.cos(lam)*dx+Math.cos(phi)*Math.sin(lam)*dy+Math.sin(phi)*dz;
+ const az=(Math.atan2(east,north)/r+360)%360;
+ const alt=Math.atan2(up,Math.hypot(east,north))/r;
+ return {az,alt};
 }
 function val(x,unit=''){return x===null||x===undefined||x===''?'—':String(x)+unit}
 window.onAircraftData=function(raw){
@@ -54,10 +65,15 @@ window.onAircraftData=function(raw){
    const alt=a.alt_baro??a.alt_geom??a.altitude;
    const gs=a.gs??a.speed;
    const heading=a.track??a.true_heading??a.mag_heading;
-   const distance=Number.isFinite(Number(a.lat))&&Number.isFinite(Number(a.lon))?distanceKm(lat,lon,Number(a.lat),Number(a.lon))+' km':'—';
-   detail.textContent='Vzdialenosť: '+distance+' · Výška: '+val(alt,' ft')+' · Rýchlosť: '+val(gs,' kt')+' · Smer: '+val(heading,'°');
+   const hasCoords=a.lat!=null&&a.lon!=null&&Number.isFinite(Number(a.lat))&&Number.isFinite(Number(a.lon));
+   const distance=hasCoords?distanceKm(lat,lon,Number(a.lat),Number(a.lon))+' km':'—';
+   const altitudeFt=Number(alt);
+   const h0=coord('elev');
+   const sky=hasCoords&&Number.isFinite(altitudeFt)&&Number.isFinite(h0)&&alt!=='ground'?skyPosition(lat,lon,h0,Number(a.lat),Number(a.lon),altitudeFt*0.3048):null;
+   detail.textContent='Vzdialenosť: '+distance+' · Výška: '+val(alt,' ft')+' · Rýchlosť: '+val(gs,' kt')+' · Smer letu: '+val(heading,'°');
+   const skyline=document.createElement('div');skyline.textContent=sky?'Na oblohe: azimut '+sky.az.toFixed(1)+'° · výška '+sky.alt.toFixed(1)+'°':'Na oblohe: chýba poloha alebo výška';
    const sub=document.createElement('small');sub.textContent='Poloha: '+val(a.lat)+', '+val(a.lon);
-   d.append(title,detail,sub);el('out').appendChild(d)
+   d.append(title,detail,skyline,sub);el('out').appendChild(d)
   }
  }catch(e){el('status').textContent='Chyba spracovania: '+e.message;el('diag').textContent='Odpoveď nebolo možné spracovať.'}
 };
