@@ -20,8 +20,8 @@ public class MainActivity extends Activity {
  if(!Double.isFinite(lat)||!Double.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
  executor.execute(()->{String output;HttpURLConnection c=null;try{
  String endpoint=String.format(java.util.Locale.US,"https://opendata.adsb.fi/api/v2/lat/%.4f/lon/%.4f/dist/100",lat,lon);
- c=(HttpURLConnection)new URL(endpoint).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(12000);c.setRequestProperty("Accept","application/json");
- int code=c.getResponseCode();if(code!=200)throw new Exception("HTTP "+code);
+ c=(HttpURLConnection)new URL(endpoint).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(12000);c.setRequestProperty("Accept","application/json");c.setRequestProperty("User-Agent","PlaneMoonPlanner/1.5 (Android; astronomy photo planning)");
+ int code=c.getResponseCode();if(code!=200){String detail="";try(InputStream err=c.getErrorStream()){if(err!=null){byte[] b=new byte[400];int n=err.read(b);if(n>0)detail=new String(b,0,n,java.nio.charset.StandardCharsets.UTF_8).replaceAll("[\\r\\n]+"," ");}}throw new Exception("adsb.fi HTTP "+code+" "+detail); }
  try(InputStream in=c.getInputStream();ByteArrayOutputStream buf=new ByteArrayOutputStream()){
  byte[] block=new byte[8192];int n;while((n=in.read(block))!=-1){buf.write(block,0,n);if(buf.size()>3000000)throw new Exception("Odpoveď je príliš veľká");}
  output=buf.toString("UTF-8");new JSONObject(output);
