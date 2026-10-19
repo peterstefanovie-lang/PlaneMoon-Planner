@@ -1,0 +1,35 @@
+package sk.planemoon.planner;
+import android.app.Activity;
+import android.os.Bundle;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import org.json.JSONObject;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+public class MainActivity extends Activity {
+ private WebView web;
+ private final ExecutorService executor=Executors.newSingleThreadExecutor();
+ @Override public void onCreate(Bundle state){super.onCreate(state);web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setDomStorageEnabled(true);web.setWebViewClient(new WebViewClient());web.addJavascriptInterface(new Bridge(),"PlaneMoonAndroid");setContentView(web);web.loadUrl("file:///android_asset/index.html");}
+ class Bridge {
+ @JavascriptInterface public void loadAircraft(double lat,double lon){
+ if(!Double.isFinite(lat)||!Double.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
+ executor.execute(()->{String output;HttpURLConnection c=null;try{
+ String endpoint=String.format(java.util.Locale.US,"https://api.airplanes.live/v2/point/%.4f/%.4f/100",lat,lon);
+ c=(HttpURLConnection)new URL(endpoint).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(12000);c.setRequestProperty("Accept","application/json");
+ int code=c.getResponseCode();if(code!=200)throw new Exception("HTTP "+code);
+ try(InputStream in=c.getInputStream();ByteArrayOutputStream buf=new ByteArrayOutputStream()){
+ byte[] block=new byte[8192];int n;while((n=in.read(block))!=-1){buf.write(block,0,n);if(buf.size()>3000000)throw new Exception("Odpoveď je príliš veľká");}
+ output=buf.toString("UTF-8");new JSONObject(output);
+ }
+ }catch(Exception ex){output="{\"error\":"+JSONObject.quote(ex.getMessage()==null?"Chyba siete":ex.getMessage())+"}";}finally{if(c!=null)c.disconnect();}
+ final String payload=JSONObject.quote(output);runOnUiThread(()->web.evaluateJavascript("window.onAircraftData("+payload+")",null));
+ });
+ }
+ }
+ @Override protected void onDestroy(){executor.shutdownNow();web.destroy();super.onDestroy();}
+}
