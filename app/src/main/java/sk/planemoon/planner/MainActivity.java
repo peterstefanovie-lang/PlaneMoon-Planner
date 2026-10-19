@@ -19,7 +19,7 @@ public class MainActivity extends Activity {
  @JavascriptInterface public void loadAircraft(double lat,double lon){
  if(!Double.isFinite(lat)||!Double.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
  executor.execute(()->{String output;HttpURLConnection c=null;try{
- String endpoint=String.format(java.util.Locale.US,"https://api.airplanes.live/v2/point/%.4f/%.4f/100",lat,lon);
+ String endpoint=String.format(java.util.Locale.US,"https://opendata.adsb.fi/api/v2/lat/%.4f/lon/%.4f/dist/100",lat,lon);
  c=(HttpURLConnection)new URL(endpoint).openConnection();c.setRequestMethod("GET");c.setConnectTimeout(10000);c.setReadTimeout(12000);c.setRequestProperty("Accept","application/json");
  int code=c.getResponseCode();if(code!=200)throw new Exception("HTTP "+code);
  try(InputStream in=c.getInputStream();ByteArrayOutputStream buf=new ByteArrayOutputStream()){
