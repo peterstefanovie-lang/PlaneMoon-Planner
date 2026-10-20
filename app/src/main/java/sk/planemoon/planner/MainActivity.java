@@ -1,6 +1,10 @@
 package sk.planemoon.planner;
 import android.app.Activity;
 import android.os.Bundle;
+import android.content.Intent;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -14,8 +18,11 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
  private WebView web;
  private final ExecutorService executor=Executors.newSingleThreadExecutor();
- @Override public void onCreate(Bundle state){super.onCreate(state);web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setDomStorageEnabled(true);web.setWebViewClient(new WebViewClient());web.addJavascriptInterface(new Bridge(),"PlaneMoonAndroid");setContentView(web);web.loadUrl("file:///android_asset/index.html");}
+ @Override public void onCreate(Bundle state){super.onCreate(state);web=new WebView(this);web.getSettings().setJavaScriptEnabled(true);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setDomStorageEnabled(true);web.setWebViewClient(new WebViewClient());web.addJavascriptInterface(new Bridge(),"PlaneMoonAndroid");setContentView(web);web.loadUrl("file:///android_asset/index.html");if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);}
  class Bridge {
+ @JavascriptInterface public void startBackground(double lat,double lon,double elev){if(!Double.isFinite(lat)||!Double.isFinite(lon)||!Double.isFinite(elev)||Math.abs(lat)>90||Math.abs(lon)>180)return;getSharedPreferences("scan",MODE_PRIVATE).edit().putLong("lat",Double.doubleToLongBits(lat)).putLong("lon",Double.doubleToLongBits(lon)).putLong("elev",Double.doubleToLongBits(elev)).apply();runOnUiThread(()->{try{startForegroundService(new Intent(MainActivity.this,ScanService.class));}catch(Exception ex){web.evaluateJavascript("document.getElementById('bgstatus').textContent="+JSONObject.quote("Službu sa nepodarilo spustiť: "+ex.getMessage()),null);}});}
+ @JavascriptInterface public void stopBackground(){runOnUiThread(()->startService(new Intent(MainActivity.this,ScanService.class).setAction("STOP")));}
+
  @JavascriptInterface public void loadAircraft(double lat,double lon){
  if(!Double.isFinite(lat)||!Double.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
  executor.execute(()->{String output;HttpURLConnection c=null;try{
