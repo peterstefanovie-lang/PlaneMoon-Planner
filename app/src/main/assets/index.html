@@ -12,14 +12,14 @@ strong{font-size:18px}.warn{color:#ffd49c}.good{color:#9fe9bb}.pill{display:inli
 .stat{background:#14233a;padding:12px;border-radius:10px}.stat b{display:block;font-size:20px;margin-top:5px}
 details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .plane{border-left:3px solid #edbb63;padding-left:12px;margin-bottom:10px}
 </style></head><body><main>
-<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 3.2 · sedemdňový kalendár a história letov</p>
+<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 3.3 · sledovanie na pozadí</p>
 <section class="panel"><h2>Stanovište</h2>
 <label>Zemepisná šírka<input id="lat" inputmode="decimal" value="48,8087"></label>
 <label>Zemepisná dĺžka<input id="lon" inputmode="decimal" value="19,3164"></label>
 <label>Nadmorská výška (m)<input id="elev" inputmode="decimal" value="525"></label>
 <div class="row"><button onclick="refresh()" class="full">Aktualizovať Mesiac a lietadlá</button></div>
 <label style="margin-top:12px"><input type="checkbox" id="auto" checked style="width:auto;margin-right:8px">Automatické skenovanie každých 30 sekúnd iba pri Mesiaci nad obzorom</label>
-<p id="status" class="muted">Pripravené na načítanie.</p></section>
+<div class="row"><button onclick="startBg()">Zapnúť sledovanie na pozadí</button><button class="secondary" onclick="stopBg()">Vypnúť</button></div><p id="bgstatus" class="muted">Sledovanie na pozadí je vypnuté. Po zapnutí zostane v notifikačnej lište trvalé oznámenie.</p><p id="status" class="muted">Pripravené na načítanie.</p></section>
 <section class="panel"><h2>🌙 Mesiac práve teraz</h2>
 <div class="stats"><div class="stat">Azimut<b id="moonaz">—</b></div><div class="stat">Výška<b id="moonalt">—</b></div><div class="stat">Uhlový priemer<b id="moondiam">—</b></div><div class="stat">Čas merania<b id="clock">—</b></div></div>
 <p id="moonstatus" class="muted"></p><label>Dátum a čas pre plánovanie<input type="datetime-local" id="planDate"></label><div class="row"><button class="secondary" onclick="showPlanned()">Vypočítať polohu Mesiaca</button><button class="secondary" onclick="useNow()">Teraz</button></div><p id="planned" class="muted"></p><p class="muted">Budúce polohy Mesiaca možno vypočítať. Budúce trasy lietadiel bez letových plánov a živých údajov nemožno spoľahlivo predpovedať.</p></section>
@@ -145,6 +145,8 @@ $('count').textContent=latest.length+' lietadiel';
 function useNow(){const d=new Date();$('planDate').value=localInput(d);showPlanned()}
 function localInput(d){const pad=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())}
 function showPlanned(){try{const value=$('planDate').value;if(!value)throw Error('Vyber dátum a čas.');const d=new Date(value);if(!Number.isFinite(d.getTime()))throw Error('Neplatný dátum');const m=moon(d,coords());$('planned').textContent='Mesiac '+d.toLocaleString('sk-SK')+': azimut '+m.az.toFixed(2)+'°, výška '+m.alt.toFixed(2)+'°, priemer '+(2*m.radius).toFixed(3)+'°.'+(m.alt<=0?' Pod obzorom.':' Nad obzorom.')}catch(e){$('planned').textContent=e.message}}
+function startBg(){try{const o=coords();window.PlaneMoonAndroid.startBackground(o.lat,o.lon,o.elev);$('bgstatus').textContent='Sledovanie na pozadí: požiadavka na spustenie odoslaná. Skontroluj trvalé oznámenie Androidu.'}catch(e){$('bgstatus').textContent=e.message}}
+function stopBg(){try{window.PlaneMoonAndroid.stopBackground();$('bgstatus').textContent='Sledovanie na pozadí vypnuté.'}catch(e){$('bgstatus').textContent=e.message}}
 function refresh(){
  if(waiting)return;
  try{
