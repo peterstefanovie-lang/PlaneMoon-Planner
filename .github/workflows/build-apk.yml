@@ -26,6 +26,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('app/src/main/assets/index.html').read_text()
+          scripts=re.findall(r'<script[^>]*>(.*?)</script>',html,re.S|re.I)
+          if len(scripts)!=1: raise SystemExit('Expected one inline script')
+          Path('/tmp/planemoon.js').write_text(scripts[0])
+          PY
+          node --check /tmp/planemoon.js
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Upload APK
