@@ -1,81 +1,103 @@
-<!doctype html>
-<html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PlaneMoon Planner</title>
-<style>
-body{background:#101b30;color:#f4f6fc;font:16px system-ui;margin:0;padding:20px}
-main{max-width:720px;margin:auto}h1{font-size:28px}h2{font-size:22px}
-.panel{background:#1c2d47;border-radius:18px;padding:20px;margin:18px 0}
-button{background:#367bdd;color:white;border:0;border-radius:10px;padding:14px 18px;font-weight:700;width:100%}
-input{width:100%;box-sizing:border-box;padding:12px;border-radius:8px;border:1px solid #7a8ca9;background:#101b30;color:white;margin:6px 0 12px}
-small,.muted{color:#bac8df}.plane{padding:12px 0;border-bottom:1px solid #41516c}.plane:last-child{border:0}
-strong{font-size:18px}.warn{color:#ffd49c}details{margin-top:12px}code{overflow-wrap:anywhere}
+<!doctype html><html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PlaneMoon Planner</title><style>
+:root{color-scheme:dark}body{background:#101b30;color:#f4f6fc;font:16px system-ui;margin:0;padding:17px}
+main{max-width:760px;margin:auto}h1{font-size:27px;margin:12px 0}h2{font-size:21px;margin:0 0 14px}
+.panel{background:#1c2d47;border-radius:17px;padding:18px;margin:15px 0}
+button{background:#367bdd;color:white;border:0;border-radius:10px;padding:13px 16px;font-weight:700;min-height:46px}
+button.full{width:100%}button.secondary{background:#334866}
+input{width:100%;box-sizing:border-box;padding:11px;border-radius:8px;border:1px solid #7185a4;background:#101b30;color:white;margin:6px 0 12px;font-size:16px}
+small,.muted{color:#b8c8df}.plane{padding:12px 0;border-bottom:1px solid #41516c}.plane:last-child{border:0}
+strong{font-size:18px}.warn{color:#ffd49c}.good{color:#9fe9bb}.pill{display:inline-block;background:#2b425f;border-radius:20px;padding:4px 9px;font-size:13px}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#14233a;padding:12px;border-radius:10px}.stat b{display:block;font-size:20px;margin-top:5px}
+details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .plane{border-left:3px solid #edbb63;padding-left:12px;margin-bottom:10px}
 </style></head><body><main>
-<h1>🌙 PlaneMoon Planner</h1><p>Testovacia Android verzia 1.6 – poloha lietadiel na oblohe</p>
+<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 2.0 · orientačný plánovač tranzitov</p>
 <section class="panel"><h2>Stanovište</h2>
-<label>Zemepisná šírka<input id="lat" type="text" inputmode="decimal" value="48,8087"></label>
-<label>Zemepisná dĺžka<input id="lon" type="text" inputmode="decimal" value="19,3164"></label>
-<label>Nadmorská výška stanovišťa (m)<input id="elev" type="text" inputmode="decimal" value="525"></label><button onclick="load()">Načítať živé ADS-B lietadlá</button>
-<p id="status">Pripravené na test pripojenia.</p><small>Údaje sú približné, nie sú určené na riadenie letovej prevádzky.</small></section>
-<section class="panel"><h2>Výsledok ADS-B</h2><div id="out">Zatiaľ bez údajov.</div>
-<details><summary>Diagnostika odpovede servera</summary><p id="diag" class="muted">Bez údajov</p></details></section>
-<section class="panel"><h2>Plánovanie preletov</h2><p>Novinka: pri lietadlách počítame azimut a výšku nad obzorom z tvojho stanovišťa. Porovnanie s polohou Mesiaca a predpoveď času tranzitu doplníme v ďalšej fáze.</p></section>
+<label>Zemepisná šírka<input id="lat" inputmode="decimal" value="48,8087"></label>
+<label>Zemepisná dĺžka<input id="lon" inputmode="decimal" value="19,3164"></label>
+<label>Nadmorská výška (m)<input id="elev" inputmode="decimal" value="525"></label>
+<div class="row"><button onclick="refresh()" class="full">Aktualizovať Mesiac a lietadlá</button></div>
+<label style="margin-top:12px"><input type="checkbox" id="auto" checked style="width:auto;margin-right:8px">Automatická aktualizácia každých 30 sekúnd</label>
+<p id="status" class="muted">Pripravené na načítanie.</p></section>
+<section class="panel"><h2>🌙 Mesiac práve teraz</h2>
+<div class="stats"><div class="stat">Azimut<b id="moonaz">—</b></div><div class="stat">Výška<b id="moonalt">—</b></div><div class="stat">Uhlový priemer<b id="moondiam">—</b></div><div class="stat">Čas merania<b id="clock">—</b></div></div>
+<p id="moonstatus" class="muted"></p></section>
+<section class="panel"><h2>Možné tranzity</h2>
+<p class="warn">Predpovede sú iba približné: konštantný smer a rýchlosť, horizont najviac 2 minúty. Nezaručujú skutočný prelet cez mesačný disk.</p>
+<div id="candidates">Čakám na údaje.</div></section>
+<section class="panel"><div class="row"><h2>ADS-B lietadlá</h2><span id="count" class="pill">0</span></div>
+<div id="out">Zatiaľ bez údajov.</div><details><summary>Diagnostika</summary><p id="diag" class="muted">Bez údajov</p></details></section>
 </main><script>
-const el=id=>document.getElementById(id);
-function coord(id){return Number(el(id).value.trim().replace(',','.'))}
-function load(){
- const lat=coord('lat'),lon=coord('lon');
- if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180){el('status').textContent='Neplatné súradnice stanovišťa.';return}
- el('status').textContent='Načítavam údaje…';el('out').textContent='Čakám na odpoveď servera.';
- if(!window.PlaneMoonAndroid){el('status').textContent='Natívne rozhranie Android nie je dostupné.';return}
- window.PlaneMoonAndroid.loadAircraft(lat,lon)
+'use strict';
+const $=id=>document.getElementById(id),RAD=Math.PI/180,DEG=180/Math.PI;
+function num(id){return Number($(id).value.trim().replace(',','.'))}
+function mod(x,n){return (x%n+n)%n}
+function coords(){const lat=num('lat'),lon=num('lon'),elev=num('elev');if(!Number.isFinite(lat)||Math.abs(lat)>90||!Number.isFinite(lon)||Math.abs(lon)>180||!Number.isFinite(elev)||elev< -500||elev>9000)throw Error('Neplatné súradnice alebo nadmorská výška');return {lat,lon,elev}}
+function ecef(lat,lon,h){const p=lat*RAD,l=lon*RAD,a=6378137,e2=0.00669437999014,N=a/Math.sqrt(1-e2*Math.sin(p)**2);return [(N+h)*Math.cos(p)*Math.cos(l),(N+h)*Math.cos(p)*Math.sin(l),(N*(1-e2)+h)*Math.sin(p)]}
+function horizontal(observer,target){const o=ecef(observer.lat,observer.lon,observer.elev),p=ecef(target.lat,target.lon,target.elev),dx=p[0]-o[0],dy=p[1]-o[1],dz=p[2]-o[2],phi=observer.lat*RAD,lam=observer.lon*RAD;
+const e=-Math.sin(lam)*dx+Math.cos(lam)*dy,n=-Math.sin(phi)*Math.cos(lam)*dx-Math.sin(phi)*Math.sin(lam)*dy+Math.cos(phi)*dz,u=Math.cos(phi)*Math.cos(lam)*dx+Math.cos(phi)*Math.sin(lam)*dy+Math.sin(phi)*dz;
+return {az:mod(Math.atan2(e,n)*DEG,360),alt:Math.atan2(u,Math.hypot(e,n))*DEG}}
+function jd(date){return date.getTime()/86400000+2440587.5}
+function moon(date,obs){
+ // Truncated lunar orbital series (low precision); topocentric parallax included.
+ const d=jd(date)-2451545.0;
+ const L=mod(218.3164477+13.17639648*d,360)*RAD;
+ const M=mod(134.9633964+13.06499295*d,360)*RAD;
+ const F=mod(93.2720950+13.22935024*d,360)*RAD;
+ const D=mod(297.8501921+12.19074912*d,360)*RAD;
+ const Ms=mod(357.5291092+0.98560028*d,360)*RAD;
+ const lon=L+(6.289*Math.sin(M)+1.274*Math.sin(2*D-M)+0.658*Math.sin(2*D)+0.214*Math.sin(2*M)-0.186*Math.sin(Ms)-0.114*Math.sin(2*F))*RAD;
+ const lat=(5.128*Math.sin(F)+0.280*Math.sin(M+F)+0.277*Math.sin(M-F)+0.173*Math.sin(2*D-F)+0.055*Math.sin(2*D+F-M)+0.046*Math.sin(2*D-F-M))*RAD;
+ const dist=385000.56-20905.36*Math.cos(M)-3699.11*Math.cos(2*D-M)-2955.97*Math.cos(2*D)-569.93*Math.cos(2*M);
+ const eps=(23.439291-0.0000003563*d)*RAD;
+ const xe=dist*Math.cos(lat)*Math.cos(lon),ye=dist*Math.cos(lat)*Math.sin(lon),ze=dist*Math.sin(lat);
+ const x=xe,y=ye*Math.cos(eps)-ze*Math.sin(eps),z=ye*Math.sin(eps)+ze*Math.cos(eps);
+ const theta=mod(280.46061837+360.98564736629*d,360)*RAD;
+ const p=obs.lat*RAD,l=obs.lon*RAD,a=6378.137,e2=0.00669437999014,N=a/Math.sqrt(1-e2*Math.sin(p)**2),h=obs.elev/1000;
+ const xo=(N+h)*Math.cos(p)*Math.cos(theta+l),yo=(N+h)*Math.cos(p)*Math.sin(theta+l),zo=(N*(1-e2)+h)*Math.sin(p);
+ const dx=x-xo,dy=y-yo,dz=z-zo,H=theta+l;
+ const east=-Math.sin(H)*dx+Math.cos(H)*dy,north=-Math.sin(p)*Math.cos(H)*dx-Math.sin(p)*Math.sin(H)*dy+Math.cos(p)*dz,up=Math.cos(p)*Math.cos(H)*dx+Math.cos(p)*Math.sin(H)*dy+Math.sin(p)*dz;
+ return {az:mod(Math.atan2(east,north)*DEG,360),alt:Math.atan2(up,Math.hypot(east,north))*DEG,radius:Math.asin(1737.4/Math.hypot(dx,dy,dz))*DEG};
 }
-function distanceKm(lat1,lon1,lat2,lon2){
- const rad=Math.PI/180,dlat=(lat2-lat1)*rad,dlon=(lon2-lon1)*rad;
- const a=Math.sin(dlat/2)**2+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dlon/2)**2;
- return Math.round(6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)))
+function sep(a,b){const a1=a.alt*RAD,b1=b.alt*RAD,delta=(a.az-b.az)*RAD;return Math.acos(Math.max(-1,Math.min(1,Math.sin(a1)*Math.sin(b1)+Math.cos(a1)*Math.cos(b1)*Math.cos(delta))))*DEG}
+function futureAircraft(a,seconds){const lat=Number(a.lat),lon=Number(a.lon),gs=Number(a.gs??a.speed),trk=Number(a.track??a.true_heading),vr=Number(a.baro_rate??a.geom_rate??0);
+if(!Number.isFinite(lat)||!Number.isFinite(lon)||!Number.isFinite(gs)||gs<40||!Number.isFinite(trk))return null;
+const km=gs*1.852*seconds/3600,br=trk*RAD,p=lat*RAD,dl=km/6371.0088;
+const p2=Math.asin(Math.sin(p)*Math.cos(dl)+Math.cos(p)*Math.sin(dl)*Math.cos(br));
+const l2=lon*RAD+Math.atan2(Math.sin(br)*Math.sin(dl)*Math.cos(p),Math.cos(dl)-Math.sin(p)*Math.sin(p2));
+const ft=Number(a.alt_geom??a.alt_baro);if(!Number.isFinite(ft))return null;
+return {lat:p2*DEG,lon:mod(l2*DEG+180,360)-180,elev:(ft+vr*seconds/60)*0.3048}}
+function textNode(tag,content,cls){const x=document.createElement(tag);x.textContent=content;if(cls)x.className=cls;return x}
+function predict(a,obs,now){if(a.alt_baro==='ground'||a.on_ground===true)return null;
+const age=Number(a.seen_pos??a.seen??0);if(!Number.isFinite(age)||age>45)return null;
+let best=null;
+for(let t=0;t<=120;t+=2){const aircraft=futureAircraft(a,t+Math.max(0,age));if(!aircraft)return null;const pos=horizontal(obs,aircraft),m=moon(new Date(now.getTime()+t*1000),obs);if(m.alt<=0||pos.alt<=0)continue;const delta=sep(pos,m);if(!best||delta<best.delta)best={t,delta,radius:m.radius,az:pos.az,alt:pos.alt}}
+return best}
+let latest=[],lastAt=null,waiting=false;
+function render(now=new Date()){let obs;try{obs=coords()}catch(e){$('status').textContent=e.message;return}
+const m=moon(now,obs);$('moonaz').textContent=m.az.toFixed(2)+'°';$('moonalt').textContent=m.alt.toFixed(2)+'°';$('moondiam').textContent=(m.radius*2).toFixed(3)+'°';$('clock').textContent=now.toLocaleTimeString('sk-SK');$('moonstatus').textContent=m.alt>0?'Mesiac je nad geometrickým obzorom.':'Mesiac je pod geometrickým obzorom.';
+const out=$('out'),cand=$('candidates');out.textContent='';cand.textContent='';
+const candidates=[];
+for(const a of latest){const flight=String(a.flight||a.callsign||a.hex||'Neznáme').trim(),ground=a.alt_baro==='ground'||a.on_ground===true;
+const ft=Number(a.alt_geom??a.alt_baro),valid=a.lat!=null&&a.lon!=null&&Number.isFinite(Number(a.lat))&&Number.isFinite(Number(a.lon))&&Number.isFinite(ft)&&!ground;
+const pos=valid?horizontal(obs,{lat:Number(a.lat),lon:Number(a.lon),elev:ft*0.3048}):null;
+const div=textNode('div','', 'plane');div.appendChild(textNode('strong',flight));
+div.appendChild(textNode('div',ground?'Na zemi':pos?'Azimut '+pos.az.toFixed(1)+'° · výška '+pos.alt.toFixed(1)+'°':'Neúplné údaje o polohe'));
+div.appendChild(textNode('small','Výška '+(ground?'na zemi':(Number.isFinite(ft)?ft.toFixed(0)+' ft':'—'))+' · rýchlosť '+(a.gs??'—')+' kt · kurz '+(a.track??'—')+'°'));out.appendChild(div);
+const best=predict(a,obs,now);if(best&&best.delta<2){candidates.push({flight,...best})}
 }
-function skyPosition(lat0,lon0,h0,lat1,lon1,h1){
- const r=Math.PI/180,a=6378137,e2=0.00669437999014;
- function xyz(lat,lon,h){const phi=lat*r,lam=lon*r,N=a/Math.sqrt(1-e2*Math.sin(phi)**2);return [(N+h)*Math.cos(phi)*Math.cos(lam),(N+h)*Math.cos(phi)*Math.sin(lam),(N*(1-e2)+h)*Math.sin(phi)]}
- const o=xyz(lat0,lon0,h0),p=xyz(lat1,lon1,h1),dx=p[0]-o[0],dy=p[1]-o[1],dz=p[2]-o[2],phi=lat0*r,lam=lon0*r;
- const east=-Math.sin(lam)*dx+Math.cos(lam)*dy;
- const north=-Math.sin(phi)*Math.cos(lam)*dx-Math.sin(phi)*Math.sin(lam)*dy+Math.cos(phi)*dz;
- const up=Math.cos(phi)*Math.cos(lam)*dx+Math.cos(phi)*Math.sin(lam)*dy+Math.sin(phi)*dz;
- const az=(Math.atan2(east,north)/r+360)%360;
- const alt=Math.atan2(up,Math.hypot(east,north))/r;
- return {az,alt};
+if(!latest.length)out.textContent='Zatiaľ bez údajov.';
+candidates.sort((a,b)=>a.delta-b.delta);
+for(const c of candidates.slice(0,12)){const div=textNode('div','', 'plane');const close=c.delta<=c.radius;div.appendChild(textNode('strong',(close?'⚠️ Možný tranzit: ':'Blízko Mesiaca: ')+c.flight));div.appendChild(textNode('div','Odhad o '+c.t+' s · odchýlka '+c.delta.toFixed(3)+'° · polomer Mesiaca '+c.radius.toFixed(3)+'°'));div.appendChild(textNode('small','Azimut '+c.az.toFixed(1)+'° · výška '+c.alt.toFixed(1)+'° · krátkodobá extrapolácia'));cand.appendChild(div)}
+if(!candidates.length)cand.textContent='V nasledujúcich 120 sekundách nebol nájdený kandidát do 2° od Mesiaca (podľa dostupných údajov).';
+$('count').textContent=latest.length+' lietadiel';
 }
-function val(x,unit=''){return x===null||x===undefined||x===''?'—':String(x)+unit}
-window.onAircraftData=function(raw){
- try{
-  const data=JSON.parse(raw);
-  if(data.error){el('status').textContent='Chyba: '+data.error;el('diag').textContent='Server odmietol požiadavku alebo nastala sieťová chyba.';el('out').textContent='Bez údajov.';return}
-  const arr=Array.isArray(data.ac)?data.ac:Array.isArray(data.aircraft)?data.aircraft:Array.isArray(data.planes)?data.planes:null;
-  const keys=Object.keys(data).slice(0,20);
-  el('diag').textContent='Kľúče JSON: '+keys.join(', ')+'; pole lietadiel: '+(arr?'áno':'nenájdené')+'; msg: '+val(data.msg);
-  if(!arr){el('status').textContent='Odpoveď prijatá, ale formát údajov nebol rozpoznaný.';el('out').textContent='Pozri diagnostiku.';return}
-  el('status').textContent='Načítaných lietadiel: '+arr.length;
-  el('out').textContent='';
-  if(!arr.length){el('out').textContent='Server vrátil prázdny zoznam. Skús načítať znova neskôr.';return}
-  const lat=coord('lat'),lon=coord('lon');
-  for(const a of arr.slice(0,50)){
-   const d=document.createElement('div');d.className='plane';
-   const title=document.createElement('strong');title.textContent=(a.flight||a.callsign||a.hex||'Neznáme lietadlo').trim();
-   const detail=document.createElement('div');
-   const alt=a.alt_baro??a.alt_geom??a.altitude;
-   const onGround=alt==='ground'||a.on_ground===true;
-   const gs=a.gs??a.speed;
-   const heading=a.track??a.true_heading??a.mag_heading;
-   const hasCoords=a.lat!=null&&a.lon!=null&&Number.isFinite(Number(a.lat))&&Number.isFinite(Number(a.lon));
-   const distance=hasCoords?distanceKm(lat,lon,Number(a.lat),Number(a.lon))+' km':'—';
-   const altitudeFt=Number(alt);
-   const h0=coord('elev');
-   const sky=hasCoords&&!onGround&&Number.isFinite(altitudeFt)&&Number.isFinite(h0)?skyPosition(lat,lon,h0,Number(a.lat),Number(a.lon),altitudeFt*0.3048):null;
-   detail.textContent='Vzdialenosť: '+distance+' · Výška: '+(onGround?'na zemi':val(alt,' ft'))+' · Rýchlosť: '+val(gs,' kt')+' · Smer letu: '+val(heading,'°');
-   const skyline=document.createElement('div');skyline.textContent=sky?'Na oblohe: azimut '+sky.az.toFixed(1)+'° · výška '+sky.alt.toFixed(1)+'°':onGround?'Lietadlo je na zemi':'Na oblohe: chýba poloha alebo výška';
-   const sub=document.createElement('small');sub.textContent='Poloha: '+val(a.lat)+', '+val(a.lon);
-   d.append(title,detail,skyline,sub);el('out').appendChild(d)
-  }
- }catch(e){el('status').textContent='Chyba spracovania: '+e.message;el('diag').textContent='Odpoveď nebolo možné spracovať.'}
-};
+function refresh(){if(waiting)return;try{const o=coords();render();if(!window.PlaneMoonAndroid)throw Error('Android rozhranie nie je dostupné');waiting=true;$('status').textContent='Načítavam ADS-B…';window.PlaneMoonAndroid.loadAircraft(o.lat,o.lon)}catch(e){waiting=false;$('status').textContent=e.message}}
+window.onAircraftData=function(raw){waiting=false;try{const data=JSON.parse(raw);if(data.error)throw Error(data.error);
+const arr=Array.isArray(data.ac)?data.ac:Array.isArray(data.aircraft)?data.aircraft:null;if(!arr)throw Error('Server vrátil neznámy formát');
+latest=arr;lastAt=new Date();$('status').textContent='Načítané '+arr.length+' lietadlá · '+lastAt.toLocaleTimeString('sk-SK');$('diag').textContent='Zdroj: opendata.adsb.fi; položky: '+Object.keys(data).join(', ');render(lastAt)
+}catch(e){$('status').textContent='Chyba ADS-B: '+e.message;$('diag').textContent=String(e)}};
+setInterval(()=>{render();if($('auto').checked&&!waiting&&(!lastAt||Date.now()-lastAt.getTime()>30000))refresh()},5000);
+render();refresh();
 </script></body></html>
