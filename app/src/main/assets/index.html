@@ -12,7 +12,7 @@ strong{font-size:18px}.warn{color:#ffd49c}.good{color:#9fe9bb}.pill{display:inli
 .stat{background:#14233a;padding:12px;border-radius:10px}.stat b{display:block;font-size:20px;margin-top:5px}
 details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .plane{border-left:3px solid #edbb63;padding-left:12px;margin-bottom:10px}
 </style></head><body><main>
-<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 3.1 · skenovanie len pri viditeľnom Mesiaci</p>
+<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 3.2 · sedemdňový kalendár a história letov</p>
 <section class="panel"><h2>Stanovište</h2>
 <label>Zemepisná šírka<input id="lat" inputmode="decimal" value="48,8087"></label>
 <label>Zemepisná dĺžka<input id="lon" inputmode="decimal" value="19,3164"></label>
@@ -23,7 +23,11 @@ details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .
 <section class="panel"><h2>🌙 Mesiac práve teraz</h2>
 <div class="stats"><div class="stat">Azimut<b id="moonaz">—</b></div><div class="stat">Výška<b id="moonalt">—</b></div><div class="stat">Uhlový priemer<b id="moondiam">—</b></div><div class="stat">Čas merania<b id="clock">—</b></div></div>
 <p id="moonstatus" class="muted"></p><label>Dátum a čas pre plánovanie<input type="datetime-local" id="planDate"></label><div class="row"><button class="secondary" onclick="showPlanned()">Vypočítať polohu Mesiaca</button><button class="secondary" onclick="useNow()">Teraz</button></div><p id="planned" class="muted"></p><p class="muted">Budúce polohy Mesiaca možno vypočítať. Budúce trasy lietadiel bez letových plánov a živých údajov nemožno spoľahlivo predpovedať.</p></section>
-<section class="panel"><h2>Možné tranzity</h2>
+<section class="panel"><h2>Kalendár na 7 dní</h2>
+<p class="muted">Časy, keď je Mesiac nad obzorom, a historická aktivita lietadiel podľa pozorovaní v tejto aplikácii. Bez nazbieraných údajov sa pravdepodobnosť tranzitu nedá určiť.</p>
+<div class="row"><button class="secondary" onclick="drawCalendar()">Aktualizovať kalendár</button><button class="secondary" onclick="clearHistory()">Vymazať históriu</button></div>
+<p id="historyStatus" class="muted"></p><div id="calendar"></div>
+</section><section class="panel"><h2>Možné tranzity</h2>
 <p class="warn">Predpovede sú iba približné: konštantný smer a rýchlosť, horizont najviac 2 minúty. Nezaručujú skutočný prelet cez mesačný disk.</p>
 <div id="candidates">Čakám na údaje.</div><p id="alertstatus" class="muted"></p></section>
 <section class="panel"><div class="row"><h2>ADS-B lietadlá</h2><span id="count" class="pill">0</span></div>
@@ -75,6 +79,48 @@ let best=null;
 for(let t=0;t<=120;t+=1){const aircraft=futureAircraft(a,t+Math.max(0,age));if(!aircraft)return null;const pos=horizontal(obs,aircraft),m=moon(new Date(now.getTime()+t*1000),obs);if(m.alt<=0||pos.alt<=0)continue;const delta=sep(pos,m);if(!best||delta<best.delta)best={t,delta,radius:m.radius,az:pos.az,alt:pos.alt}}
 return best}
 let latest=[],lastAt=null,waiting=false,alertedKey='',lastWarning=0,moonWasVisible=null;
+const HISTORY_KEY='planemoon-history-v1';
+function historyRead(){try{const v=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');return Array.isArray(v)?v:[]}catch(e){return []}}
+function historyWrite(v){try{localStorage.setItem(HISTORY_KEY,JSON.stringify(v.slice(-12000)))}catch(e){$('historyStatus').textContent='Históriu sa nepodarilo uložiť.'}}
+function clearHistory(){if(!confirm('Vymazať všetky nazbierané pozorovania?'))return;localStorage.removeItem(HISTORY_KEY);drawCalendar()}
+function collectHistory(arr,when){
+ let o;try{o=coords()}catch(e){return}
+ const m=moon(when,o);if(m.alt<=0)return;
+ const list=historyRead(),hour=when.getHours(),day=when.toISOString().slice(0,10);
+ const eligible=arr.filter(a=>a.lat!=null&&a.lon!=null&&a.alt_baro!=='ground'&&a.on_ground!==true);
+ const near=eligible.filter(a=>{const h=a.alt_geom??a.alt_baro;if(h==null||!Number.isFinite(Number(h)))return false;const p=horizontal(o,{lat:Number(a.lat),lon:Number(a.lon),elev:Number(h)*0.3048});return p.alt>0&&sep(p,m)<10}).length;
+ // One observation per five-minute interval, to avoid counting the same aircraft repeatedly.
+ const bucket=Math.floor(when.getTime()/300000);
+ if(!list.some(x=>x.bucket===bucket)){list.push({bucket,day,hour,near,total:eligible.length});historyWrite(list)}
+ drawCalendar();
+}
+function drawCalendar(){
+ const root=$('calendar');if(!root)return;root.textContent='';
+ const obs=coords(),hist=historyRead(),now=new Date();
+ $('historyStatus').textContent='Uložených meraní: '+hist.length+' (len počas otvorenej aplikácie; miestne úložisko).';
+ for(let i=0;i<7;i++){
+  const day=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i),entry=textNode('div','', 'plane');
+  entry.appendChild(textNode('strong',day.toLocaleDateString('sk-SK',{weekday:'short',day:'numeric',month:'numeric'})));
+  let visible=[],best=[];
+  for(let h=0;h<24;h++){
+   const dt=new Date(day.getFullYear(),day.getMonth(),day.getDate(),h,30);
+   if(moon(dt,obs).alt>0){visible.push(h);
+    const samples=hist.filter(x=>x.hour===h);
+    if(samples.length>=3){
+      const mean=samples.reduce((n,x)=>n+x.near,0)/samples.length;
+      best.push({h,mean,samples:samples.length});
+    }
+   }
+  }
+  if(!visible.length)entry.appendChild(textNode('div','Mesiac v hodinových intervaloch nebol nad obzorom.'));
+  else{
+   entry.appendChild(textNode('div','Mesiac nad obzorom približne: '+String(visible[0]).padStart(2,'0')+':00–'+String(visible[visible.length-1]+1).padStart(2,'0')+':00 (hodinové rozlíšenie).'));
+   best.sort((a,b)=>b.mean-a.mean);
+   entry.appendChild(textNode('small',best.length?'Historicky aktívne hodiny: '+best.slice(0,3).map(x=>String(x.h).padStart(2,'0')+':00 ('+x.mean.toFixed(1)+' lietadla do 10°; '+x.samples+' meraní)').join(' · '):'Zatiaľ nedostatok historických pozorovaní pre hodinové porovnanie.'));
+  }
+  root.appendChild(entry)
+ }
+}
 function render(now=new Date()){let obs;try{obs=coords()}catch(e){$('status').textContent=e.message;return}
 const m=moon(now,obs);$('moonaz').textContent=m.az.toFixed(2)+'°';$('moonalt').textContent=m.alt.toFixed(2)+'°';$('moondiam').textContent=(m.radius*2).toFixed(3)+'°';$('clock').textContent=now.toLocaleTimeString('sk-SK');$('moonstatus').textContent=m.alt>0?'Mesiac je nad geometrickým obzorom.':'Mesiac je pod geometrickým obzorom.';
 const out=$('out'),cand=$('candidates');out.textContent='';cand.textContent='';
@@ -117,7 +163,7 @@ function refresh(){
 }
 window.onAircraftData=function(raw){waiting=false;try{const data=JSON.parse(raw);if(data.error)throw Error(data.error);
 const arr=Array.isArray(data.ac)?data.ac:Array.isArray(data.aircraft)?data.aircraft:null;if(!arr)throw Error('Server vrátil neznámy formát');
-latest=arr;lastAt=new Date();$('status').textContent='Načítané '+arr.length+' lietadlá · '+lastAt.toLocaleTimeString('sk-SK');$('diag').textContent='Zdroj: opendata.adsb.fi; položky: '+Object.keys(data).join(', ');render(lastAt)
+latest=arr;lastAt=new Date();collectHistory(arr,lastAt);$('status').textContent='Načítané '+arr.length+' lietadlá · '+lastAt.toLocaleTimeString('sk-SK');$('diag').textContent='Zdroj: opendata.adsb.fi; položky: '+Object.keys(data).join(', ');render(lastAt)
 }catch(e){$('status').textContent='Chyba ADS-B: '+e.message;$('diag').textContent=String(e)}};
 setInterval(()=>{
  const now=new Date();render(now);
@@ -137,5 +183,5 @@ setInterval(()=>{
   if($('auto').checked&&!waiting&&(justRose||!lastAt||now-lastAt>30000))refresh();
  }catch(e){$('status').textContent=e.message}
 },5000);
-useNow();render();refresh();
+useNow();render();drawCalendar();refresh();
 </script></body></html>
