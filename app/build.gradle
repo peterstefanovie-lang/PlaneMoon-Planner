@@ -2,5 +2,5 @@ plugins { id 'com.android.application' }
 android {
  namespace 'sk.planemoon.planner'
  compileSdk 35
- defaultConfig { applicationId 'sk.planemoon.planner'; minSdk 26; targetSdk 35; versionCode 5; versionName '3.0-planner' }
+ defaultConfig { applicationId 'sk.planemoon.planner'; minSdk 26; targetSdk 35; versionCode 6; versionName '3.1-moon-visible' }
 }
