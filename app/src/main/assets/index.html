@@ -31,7 +31,7 @@ details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .
 <p class="warn">Predpovede sú iba približné: konštantný smer a rýchlosť, horizont najviac 2 minúty. Nezaručujú skutočný prelet cez mesačný disk.</p>
 <div id="candidates">Čakám na údaje.</div><p id="alertstatus" class="muted"></p></section>
 <section class="panel"><div class="row"><h2>ADS-B lietadlá</h2><span id="count" class="pill">0</span></div>
-<div id="out">Zatiaľ bez údajov.</div><details><summary>Diagnostika</summary><p id="diag" class="muted">Bez údajov</p></details></section>
+<div id="out">Zatiaľ bez údajov.</div><p class="muted">Zdroj živých údajov: <a href="https://adsb.fi/" style="color:#a8c9ff">adsb.fi</a>. Údaje len na osobné nekomerčné použitie.</p><details><summary>Diagnostika</summary><p id="diag" class="muted">Bez údajov</p></details></section>
 </main><script>
 'use strict';
 const $=id=>document.getElementById(id),RAD=Math.PI/180,DEG=180/Math.PI;
