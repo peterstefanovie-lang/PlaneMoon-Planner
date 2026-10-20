@@ -63,15 +63,16 @@ window.onAircraftData=function(raw){
    const title=document.createElement('strong');title.textContent=(a.flight||a.callsign||a.hex||'Neznáme lietadlo').trim();
    const detail=document.createElement('div');
    const alt=a.alt_baro??a.alt_geom??a.altitude;
+   const onGround=alt==='ground'||a.on_ground===true;
    const gs=a.gs??a.speed;
    const heading=a.track??a.true_heading??a.mag_heading;
    const hasCoords=a.lat!=null&&a.lon!=null&&Number.isFinite(Number(a.lat))&&Number.isFinite(Number(a.lon));
    const distance=hasCoords?distanceKm(lat,lon,Number(a.lat),Number(a.lon))+' km':'—';
    const altitudeFt=Number(alt);
    const h0=coord('elev');
-   const sky=hasCoords&&Number.isFinite(altitudeFt)&&Number.isFinite(h0)&&alt!=='ground'?skyPosition(lat,lon,h0,Number(a.lat),Number(a.lon),altitudeFt*0.3048):null;
-   detail.textContent='Vzdialenosť: '+distance+' · Výška: '+val(alt,' ft')+' · Rýchlosť: '+val(gs,' kt')+' · Smer letu: '+val(heading,'°');
-   const skyline=document.createElement('div');skyline.textContent=sky?'Na oblohe: azimut '+sky.az.toFixed(1)+'° · výška '+sky.alt.toFixed(1)+'°':'Na oblohe: chýba poloha alebo výška';
+   const sky=hasCoords&&!onGround&&Number.isFinite(altitudeFt)&&Number.isFinite(h0)?skyPosition(lat,lon,h0,Number(a.lat),Number(a.lon),altitudeFt*0.3048):null;
+   detail.textContent='Vzdialenosť: '+distance+' · Výška: '+(onGround?'na zemi':val(alt,' ft'))+' · Rýchlosť: '+val(gs,' kt')+' · Smer letu: '+val(heading,'°');
+   const skyline=document.createElement('div');skyline.textContent=sky?'Na oblohe: azimut '+sky.az.toFixed(1)+'° · výška '+sky.alt.toFixed(1)+'°':onGround?'Lietadlo je na zemi':'Na oblohe: chýba poloha alebo výška';
    const sub=document.createElement('small');sub.textContent='Poloha: '+val(a.lat)+', '+val(a.lon);
    d.append(title,detail,skyline,sub);el('out').appendChild(d)
   }
