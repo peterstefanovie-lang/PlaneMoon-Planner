@@ -12,7 +12,7 @@ strong{font-size:18px}.warn{color:#ffd49c}.good{color:#9fe9bb}.pill{display:inli
 .stat{background:#14233a;padding:12px;border-radius:10px}.stat b{display:block;font-size:20px;margin-top:5px}
 details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .plane{border-left:3px solid #edbb63;padding-left:12px;margin-bottom:10px}
 </style></head><body><main>
-<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 3.6 · 30-dňová história</p>
+<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 4.0 · predpoveď a história priblížení</p>
 <section class="panel"><h2>Stanovište</h2>
 <label>Zemepisná šírka<input id="lat" inputmode="decimal" value="48,8087"></label>
 <label>Zemepisná dĺžka<input id="lon" inputmode="decimal" value="19,3164"></label>
@@ -22,7 +22,7 @@ details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .
 <div class="row"><button onclick="startBg()">Zapnúť sledovanie na pozadí</button><button class="secondary" onclick="stopBg()">Vypnúť</button></div><p id="bgstatus" class="muted">Sledovanie na pozadí je vypnuté. Po zapnutí zostane v notifikačnej lište trvalé oznámenie.</p><p id="status" class="muted">Pripravené na načítanie.</p></section>
 <section class="panel"><h2>Štatistika sledovania na pozadí – dnes</h2>
 <div class="stats"><div class="stat">Úspešné skenovania<b id="sScans">0</b></div><div class="stat">Unikátne lietadlá<b id="sUnique">0</b></div><div class="stat">Skenovania s priblížením do 2°<b id="sNear">0</b></div><div class="stat">Skenovania s možným tranzitom<b id="sCandidates">0</b></div></div>
-<h2 style="margin-top:18px">Súhrn za posledných 30 dní</h2><div id="statsTotals" class="stats"></div><h2 style="margin-top:18px">Denná história</h2><div id="statsDays"></div><p id="sLast" class="muted">Posledné úspešné skenovanie: —</p><p id="sState" class="muted">Stav: —</p><p id="sError" class="warn"></p>
+<h2 style="margin-top:18px">Súhrn za posledných 30 dní</h2><div id="statsTotals" class="stats"></div><h2 style="margin-top:18px">Zaznamenané priblíženia lietadiel</h2><p class="muted">Odhadované časy a uhlové vzdialenosti podľa ADS-B. Tranzity nie sú potvrdené fotografiou.</p><div id="approachLog"></div><h2 style="margin-top:18px">Najzaujímavejšie hodiny podľa histórie</h2><div id="hourWindows"></div><h2 style="margin-top:18px">Denná história</h2><div id="statsDays"></div><p id="sLast" class="muted">Posledné úspešné skenovanie: —</p><p id="sState" class="muted">Stav: —</p><p id="sError" class="warn"></p>
 <div class="row"><button class="secondary" onclick="updateStats()">Aktualizovať štatistiku</button><button class="secondary" onclick="resetStats()">Vymazať históriu štatistiky</button></div>
 <p class="muted">Denné údaje sa archivujú 30 dní. Počty priblížení a tranzitov znamenajú počet skenovaní, nie počet jednotlivých preletov. Súčet denných unikátnych lietadiel môže opakovane započítať to isté lietadlo v rôznych dňoch. Štatistika otvorenej aplikácie sa nezapočítava.</p>
 </section><section class="panel"><h2>🌙 Mesiac práve teraz</h2>
@@ -162,6 +162,21 @@ function updateStats(){
   for(const [label,value] of [['Skenovania',t.scans||0],['Súčet denných unikátnych lietadiel',t.uniqueDailySum||0],['Skenovania do 2°',t.nearScans||0],['Skenovania s tranzitom',t.candidateScans||0]]){
    const box=textNode('div','', 'stat');box.appendChild(textNode('div',label));box.appendChild(textNode('b',String(value)));total.appendChild(box);
   }
+  const events=s.approaches||[],log=$('approachLog');log.textContent='';
+  if(!events.length)log.textContent='Zatiaľ bez priblížení do 2°. Potrebné je aktívne sledovanie pri Mesiaci nad obzorom.';
+  for(const e of events.slice(0,100)){
+   const item=textNode('div','', 'plane'),date=new Date(e.predictedAt),transit=e.separation<=e.moonRadius;
+   item.appendChild(textNode('strong',(transit?'⚠️ Možný tranzit · ':'Priblíženie · ')+(e.flight||e.hex||'Neznáme')));
+   item.appendChild(textNode('div',date.toLocaleString('sk-SK')+' · odchýlka '+Number(e.separation).toFixed(3)+'°'));
+   item.appendChild(textNode('small','ICAO '+(e.hex||'—')+' · výška '+Math.round(e.altFt||0)+' ft · '+Math.round(e.speedKt||0)+' kt · kurz '+Math.round(e.track||0)+'°'));
+   log.appendChild(item);
+  }
+  const byHour=new Map();
+  for(const e of events){const hour=new Date(e.predictedAt).getHours(),v=byHour.get(hour)||{n:0,transit:0};v.n++;if(e.separation<=e.moonRadius)v.transit++;byHour.set(hour,v)}
+  const wins=$('hourWindows');wins.textContent='';
+  const ranking=[...byHour.entries()].sort((a,b)=>b[1].n-a[1].n);
+  if(!ranking.length)wins.textContent='Zatiaľ nedostatok historických udalostí.';
+  for(const [h,v] of ranking.slice(0,8)){const line=textNode('div',String(h).padStart(2,'0')+':00–'+String((h+1)%24).padStart(2,'0')+':00 · '+v.n+' priblížení, '+v.transit+' možných tranzitov','plane');wins.appendChild(line)}
   const root=$('statsDays');root.textContent='';
   if(!days.length)root.textContent='Zatiaľ bez uložených dní.';
   for(const day of days){const div=textNode('div','', 'plane');div.appendChild(textNode('strong',day.day));div.appendChild(textNode('div','Skenovania: '+(day.scans||0)+' · unikátne lietadlá: '+(day.unique||0)));div.appendChild(textNode('small','Do 2°: '+(day.nearScans||0)+' · možné tranzity: '+(day.candidateScans||0)));root.appendChild(div);}
