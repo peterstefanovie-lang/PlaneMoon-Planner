@@ -10,8 +10,6 @@ public class ScanService extends Service {
  private Handler handler; private boolean running; private long lastAlert=0;
  private android.content.SharedPreferences stats(){return getSharedPreferences("stats",MODE_PRIVATE);}
  private void status(String key,String value){stats().edit().putString(key,value).apply();}
- private void bump(String key){android.content.SharedPreferences p=stats();p.edit().putInt(key,p.getInt(key,0)+1).apply();}
- private void daily(){String today=new java.text.SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date());android.content.SharedPreferences p=stats();if(!today.equals(p.getString("day",""))){p.edit().clear().putString("day",today).apply();}}
  private void error(String message){status("error",message);status("lastError",new java.text.SimpleDateFormat("dd.MM. HH:mm:ss",Locale.getDefault()).format(new Date()));}
 
  private static final String CHANNEL="plane_moon_scan", ALERT="plane_moon_alert";
@@ -21,14 +19,10 @@ public class ScanService extends Service {
  private Notification notification(String s){Intent stop=new Intent(this,ScanService.class).setAction("STOP");PendingIntent p=PendingIntent.getService(this,1,stop,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);return new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_menu_compass).setContentTitle("PlaneMoon Planner").setContentText(s).setOngoing(true).addAction(android.R.drawable.ic_menu_close_clear_cancel,"Zastaviť",p).build();}
  private void scan()throws Exception{
   android.content.SharedPreferences pref=getSharedPreferences("scan",MODE_PRIVATE);double lat=Double.longBitsToDouble(pref.getLong("lat",Double.doubleToLongBits(48.8087))),lon=Double.longBitsToDouble(pref.getLong("lon",Double.doubleToLongBits(19.3164))),elev=Double.longBitsToDouble(pref.getLong("elev",Double.doubleToLongBits(525)));
-  long now=System.currentTimeMillis();daily();double[] m=moon(now,lat,lon,elev);if(m[1]<=0){status("state","Mesiac pod obzorom");return;}status("state","Skenovanie");
+  long now=System.currentTimeMillis();double[] m=moon(now,lat,lon,elev);if(m[1]<=0){status("state","Mesiac pod obzorom");return;}status("state","Skenovanie");
   HttpURLConnection c=null;String raw;
   try{c=(HttpURLConnection)new URL(String.format(Locale.US,"https://opendata.adsb.fi/api/v2/lat/%.4f/lon/%.4f/dist/100",lat,lon)).openConnection();c.setConnectTimeout(10000);c.setReadTimeout(12000);c.setRequestProperty("User-Agent","PlaneMoonPlanner/3.3 (Android; astronomy photography)");try(InputStream in=c.getInputStream();ByteArrayOutputStream b=new ByteArrayOutputStream()){byte[] block=new byte[8192];int n;while((n=in.read(block))!=-1){b.write(block,0,n);if(b.size()>3000000)return;}raw=b.toString("UTF-8");}}finally{if(c!=null)c.disconnect();}
   JSONObject response=new JSONObject(raw);JSONArray aircraft=response.optJSONArray("ac");if(aircraft==null)aircraft=response.optJSONArray("aircraft");if(aircraft==null){String message=response.optString("error",response.optString("message",""));throw new Exception("ADS-B odpoveď bez zoznamu lietadiel"+(message.isEmpty()?" (polia: "+response.names()+")":": "+message));}
- bump("scans");status("lastSuccess",new java.text.SimpleDateFormat("dd.MM. HH:mm:ss",Locale.getDefault()).format(new Date()));status("lastCount",String.valueOf(aircraft.length()));status("state","Úspešné načítanie");status("error","");
- android.content.SharedPreferences sp=stats();java.util.HashSet<String> seen=new java.util.HashSet<>();try{JSONArray old=new JSONArray(sp.getString("seen","[]"));for(int k=0;k<old.length();k++)seen.add(old.optString(k));}catch(Exception ignored){}
- for(int k=0;k<aircraft.length();k++){JSONObject a=aircraft.optJSONObject(k);if(a==null)continue;String hex=a.optString("hex","").trim();if(!hex.isEmpty())seen.add(hex);}
- sp.edit().putString("seen",new JSONArray(seen).toString()).putInt("unique",seen.size()).apply();
   double closest=100;String flight="";int seconds=0;double moonRadius=0;boolean nearAny=false;boolean candidateAny=false;
   for(int i=0;i<aircraft.length();i++){JSONObject a=aircraft.optJSONObject(i);if(a==null||!a.has("lat")||!a.has("lon")||"ground".equals(a.optString("alt_baro")))continue;
    double alat=a.optDouble("lat",Double.NaN),alon=a.optDouble("lon",Double.NaN),ft=a.optDouble("alt_geom",a.optDouble("alt_baro",Double.NaN)),gs=a.optDouble("gs",Double.NaN),trk=a.optDouble("track",Double.NaN),age=a.optDouble("seen_pos",a.optDouble("seen",0)),vr=a.optDouble("baro_rate",a.optDouble("geom_rate",0));
@@ -38,7 +32,7 @@ public class ScanService extends Service {
     if(pos[1]<=0||moon[1]<=0)continue;double sep=separation(pos,moon);if(sep<2)nearAny=true;if(sep<=moon[2])candidateAny=true;if(sep<closest){closest=sep;flight=a.optString("flight",a.optString("hex","Lietadlo")).trim();seconds=t;moonRadius=moon[2];}
    }
   }
-  if(nearAny)bump("nearScans");if(candidateAny)bump("candidateScans");
+  StatsStore.record(this,aircraft,nearAny,candidateAny);
  if(closest<=moonRadius&&now-lastAlert>60000){lastAlert=now;String msg=flight+" – možný prelet o "+seconds+" s (orientačný odhad).";Notification n=new Notification.Builder(this,ALERT).setSmallIcon(android.R.drawable.ic_dialog_alert).setContentTitle("⚠️ Možný tranzit pred Mesiacom").setContentText(msg).setAutoCancel(true).setDefaults(Notification.DEFAULT_SOUND|Notification.DEFAULT_VIBRATE).build();getSystemService(NotificationManager.class).notify(102,n);}
  }
  private static double mod(double x,double n){return (x%n+n)%n;}
