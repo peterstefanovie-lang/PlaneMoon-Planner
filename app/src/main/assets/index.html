@@ -12,7 +12,7 @@ strong{font-size:18px}.warn{color:#ffd49c}.good{color:#9fe9bb}.pill{display:inli
 .stat{background:#14233a;padding:12px;border-radius:10px}.stat b{display:block;font-size:20px;margin-top:5px}
 details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .plane{border-left:3px solid #edbb63;padding-left:12px;margin-bottom:10px}
 </style></head><body><main>
-<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 3.4 · štatistika sledovania</p>
+<h1>🌙 PlaneMoon Planner</h1><p class="muted">Verzia 3.6 · 30-dňová história</p>
 <section class="panel"><h2>Stanovište</h2>
 <label>Zemepisná šírka<input id="lat" inputmode="decimal" value="48,8087"></label>
 <label>Zemepisná dĺžka<input id="lon" inputmode="decimal" value="19,3164"></label>
@@ -20,11 +20,11 @@ details{margin-top:12px}summary{cursor:pointer}label{display:block}#candidates .
 <div class="row"><button onclick="refresh()" class="full">Aktualizovať Mesiac a lietadlá</button></div>
 <label style="margin-top:12px"><input type="checkbox" id="auto" checked style="width:auto;margin-right:8px">Automatické skenovanie každých 30 sekúnd iba pri Mesiaci nad obzorom</label>
 <div class="row"><button onclick="startBg()">Zapnúť sledovanie na pozadí</button><button class="secondary" onclick="stopBg()">Vypnúť</button></div><p id="bgstatus" class="muted">Sledovanie na pozadí je vypnuté. Po zapnutí zostane v notifikačnej lište trvalé oznámenie.</p><p id="status" class="muted">Pripravené na načítanie.</p></section>
-<section class="panel"><h2>Štatistika sledovania na pozadí</h2>
+<section class="panel"><h2>Štatistika sledovania na pozadí – dnes</h2>
 <div class="stats"><div class="stat">Úspešné skenovania<b id="sScans">0</b></div><div class="stat">Unikátne lietadlá<b id="sUnique">0</b></div><div class="stat">Skenovania s priblížením do 2°<b id="sNear">0</b></div><div class="stat">Skenovania s možným tranzitom<b id="sCandidates">0</b></div></div>
-<p id="sLast" class="muted">Posledné úspešné skenovanie: —</p><p id="sState" class="muted">Stav: —</p><p id="sError" class="warn"></p>
-<div class="row"><button class="secondary" onclick="updateStats()">Aktualizovať štatistiku</button><button class="secondary" onclick="resetStats()">Vynulovať</button></div>
-<p class="muted">Denné počítadlá služby na pozadí. Priblíženia a tranzity sú počty skenovaní, nie unikátnych preletov. Štatistika otvorenej aplikácie sa nezapočítava.</p>
+<h2 style="margin-top:18px">Súhrn za posledných 30 dní</h2><div id="statsTotals" class="stats"></div><h2 style="margin-top:18px">Denná história</h2><div id="statsDays"></div><p id="sLast" class="muted">Posledné úspešné skenovanie: —</p><p id="sState" class="muted">Stav: —</p><p id="sError" class="warn"></p>
+<div class="row"><button class="secondary" onclick="updateStats()">Aktualizovať štatistiku</button><button class="secondary" onclick="resetStats()">Vymazať históriu štatistiky</button></div>
+<p class="muted">Denné údaje sa archivujú 30 dní. Počty priblížení a tranzitov znamenajú počet skenovaní, nie počet jednotlivých preletov. Súčet denných unikátnych lietadiel môže opakovane započítať to isté lietadlo v rôznych dňoch. Štatistika otvorenej aplikácie sa nezapočítava.</p>
 </section><section class="panel"><h2>🌙 Mesiac práve teraz</h2>
 <div class="stats"><div class="stat">Azimut<b id="moonaz">—</b></div><div class="stat">Výška<b id="moonalt">—</b></div><div class="stat">Uhlový priemer<b id="moondiam">—</b></div><div class="stat">Čas merania<b id="clock">—</b></div></div>
 <p id="moonstatus" class="muted"></p><label>Dátum a čas pre plánovanie<input type="datetime-local" id="planDate"></label><div class="row"><button class="secondary" onclick="showPlanned()">Vypočítať polohu Mesiaca</button><button class="secondary" onclick="useNow()">Teraz</button></div><p id="planned" class="muted"></p><p class="muted">Budúce polohy Mesiaca možno vypočítať. Budúce trasy lietadiel bez letových plánov a živých údajov nemožno spoľahlivo predpovedať.</p></section>
@@ -150,8 +150,24 @@ $('count').textContent=latest.length+' lietadiel';
 function useNow(){const d=new Date();$('planDate').value=localInput(d);showPlanned()}
 function localInput(d){const pad=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())}
 function showPlanned(){try{const value=$('planDate').value;if(!value)throw Error('Vyber dátum a čas.');const d=new Date(value);if(!Number.isFinite(d.getTime()))throw Error('Neplatný dátum');const m=moon(d,coords());$('planned').textContent='Mesiac '+d.toLocaleString('sk-SK')+': azimut '+m.az.toFixed(2)+'°, výška '+m.alt.toFixed(2)+'°, priemer '+(2*m.radius).toFixed(3)+'°.'+(m.alt<=0?' Pod obzorom.':' Nad obzorom.')}catch(e){$('planned').textContent=e.message}}
-function updateStats(){try{const s=JSON.parse(window.PlaneMoonAndroid.getScanStats());$('sScans').textContent=s.scans||0;$('sUnique').textContent=s.unique||0;$('sNear').textContent=s.nearScans||0;$('sCandidates').textContent=s.candidateScans||0;$('sLast').textContent='Posledné úspešné skenovanie: '+(s.lastSuccess||'—')+' · posledný počet lietadiel: '+(s.lastCount||'—');$('sState').textContent='Stav: '+(s.state||'Zatiaľ bez údajov')+' · deň: '+(s.day||'—');$('sError').textContent=s.error?'Posledná chyba ('+(s.lastError||'')+'): '+s.error:''}catch(e){$('sError').textContent='Štatistika nie je dostupná: '+e.message}}
-function resetStats(){if(!confirm('Vynulovať štatistiku sledovania?'))return;window.PlaneMoonAndroid.resetScanStats();updateStats()}
+function updateStats(){
+ try{
+  const s=JSON.parse(window.PlaneMoonAndroid.getScanStats()),d=s.today||{},t=s.total||{},days=s.days||[];
+  $('sScans').textContent=d.scans||0;$('sUnique').textContent=d.unique||0;
+  $('sNear').textContent=d.nearScans||0;$('sCandidates').textContent=d.candidateScans||0;
+  $('sLast').textContent='Posledné úspešné skenovanie: '+(s.lastSuccess||'—')+' · posledný počet lietadiel: '+(s.lastCount||'—');
+  $('sState').textContent='Stav: '+(s.state||'Zatiaľ bez údajov')+' · deň: '+(s.day||'—');
+  $('sError').textContent=s.error?'Posledná chyba ('+(s.lastError||'')+'): '+s.error:'';
+  const total=$('statsTotals');total.textContent='';
+  for(const [label,value] of [['Skenovania',t.scans||0],['Súčet denných unikátnych lietadiel',t.uniqueDailySum||0],['Skenovania do 2°',t.nearScans||0],['Skenovania s tranzitom',t.candidateScans||0]]){
+   const box=textNode('div','', 'stat');box.appendChild(textNode('div',label));box.appendChild(textNode('b',String(value)));total.appendChild(box);
+  }
+  const root=$('statsDays');root.textContent='';
+  if(!days.length)root.textContent='Zatiaľ bez uložených dní.';
+  for(const day of days){const div=textNode('div','', 'plane');div.appendChild(textNode('strong',day.day));div.appendChild(textNode('div','Skenovania: '+(day.scans||0)+' · unikátne lietadlá: '+(day.unique||0)));div.appendChild(textNode('small','Do 2°: '+(day.nearScans||0)+' · možné tranzity: '+(day.candidateScans||0)));root.appendChild(div);}
+ }catch(e){$('sError').textContent='Štatistika nie je dostupná: '+e.message}
+}
+function resetStats(){if(!confirm('Naozaj vymazať CELÚ 30-dňovú históriu sledovania? Táto operácia sa nedá vrátiť.'))return;window.PlaneMoonAndroid.resetScanStats();updateStats()}
 function startBg(){try{const o=coords();window.PlaneMoonAndroid.startBackground(o.lat,o.lon,o.elev);$('bgstatus').textContent='Sledovanie na pozadí: požiadavka na spustenie odoslaná. Skontroluj trvalé oznámenie Androidu.'}catch(e){$('bgstatus').textContent=e.message}}
 function stopBg(){try{window.PlaneMoonAndroid.stopBackground();$('bgstatus').textContent='Sledovanie na pozadí vypnuté.'}catch(e){$('bgstatus').textContent=e.message}}
 function refresh(){
