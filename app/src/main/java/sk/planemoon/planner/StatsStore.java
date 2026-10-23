@@ -30,6 +30,19 @@ public final class StatsStore {
    p.edit().putString("day",date).putString("lastSuccess",v.optString("lastSuccess")).putString("lastCount",String.valueOf(planes.length())).putString("state","Úspešné načítanie").putString("error","").apply();
   }catch(Exception e){p.edit().putString("error","Zápis histórie: "+e.getMessage()).apply();}
  }
+ public static synchronized void recordApproaches(Context c,JSONArray candidates){
+  SharedPreferences p=pref(c);JSONArray log;try{log=new JSONArray(p.getString("approaches","[]"));}catch(Exception e){log=new JSONArray();}
+  long now=System.currentTimeMillis();ArrayList<JSONObject> entries=new ArrayList<>();
+  for(int i=0;i<log.length();i++){JSONObject v=log.optJSONObject(i);if(v!=null&&now-v.optLong("predictedAt",now)<31L*86400000L)entries.add(v);}
+  for(int i=0;i<candidates.length();i++){JSONObject incoming=candidates.optJSONObject(i);if(incoming==null)continue;
+   String hex=incoming.optString("hex","");long when=incoming.optLong("predictedAt");if(hex.isEmpty()||when<=0)continue;
+   int match=-1;for(int j=0;j<entries.size();j++){JSONObject old=entries.get(j);if(hex.equals(old.optString("hex"))&&Math.abs(when-old.optLong("predictedAt"))<10*60000L){match=j;break;}}
+   if(match<0)entries.add(incoming);else if(incoming.optDouble("separation",99)<entries.get(match).optDouble("separation",99))entries.set(match,incoming);
+  }
+  entries.sort((a,b)->Long.compare(b.optLong("predictedAt"),a.optLong("predictedAt")));
+  JSONArray out=new JSONArray();for(int i=0;i<Math.min(1000,entries.size());i++)out.put(entries.get(i));
+  p.edit().putString("approaches",out.toString()).apply();
+ }
  public static synchronized String summary(Context c){
   migrate(c);SharedPreferences p=pref(c);JSONObject a=read(p),result=new JSONObject(),total=new JSONObject(),current=a.optJSONObject(today());if(current==null)current=new JSONObject();
   try{
@@ -40,7 +53,7 @@ public final class StatsStore {
     d.put("unique",v.optInt("unique"));total.put("uniqueDailySum",total.optInt("uniqueDailySum")+v.optInt("unique"));
     days.put(d);
    }
-   result.put("day",today());result.put("today",current);result.put("total",total);result.put("days",days);
+   result.put("approaches",new JSONArray(p.getString("approaches","[]")));result.put("day",today());result.put("today",current);result.put("total",total);result.put("days",days);
    for(String k:new String[]{"lastSuccess","lastError","lastCount","state","error"})result.put(k,p.getString(k,""));
   }catch(Exception ignored){}
   return result.toString();
